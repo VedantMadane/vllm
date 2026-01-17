@@ -13,7 +13,10 @@ from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
 if is_flash_attn_varlen_func_available():
     from vllm.v1.attention.backends.fa_utils import flash_attn_varlen_func
 from vllm.logger import init_logger
-from vllm.v1.attention.backends.utils import get_kv_cache_layout
+from vllm.v1.attention.backends.utils import (
+    get_kv_cache_layout,
+    update_kv_cache_with_diffkv_op,
+)
 
 from .flash_attn import (
     FlashAttentionBackend,
@@ -174,14 +177,15 @@ class FlashAttentionDiffKVImpl(FlashAttentionImpl):
             # actual tokens.
 
             # kv_cache update for different head_size K and V
-            triton_reshape_and_cache_flash_diffkv(
-                key,
-                value,
-                kv_cache,
-                attn_metadata.slot_mapping,
-                self.kv_cache_dtype,
-                layer._k_scale,
-                layer._v_scale,
+            update_kv_cache_with_diffkv_op(
+                key=key,
+                value=value,
+                kv_cache=kv_cache,
+                slot_mapping=attn_metadata.slot_mapping,
+                kv_cache_dtype=self.kv_cache_dtype,
+                k_scale=layer._k_scale,
+                v_scale=layer._v_scale,
+                op=triton_reshape_and_cache_flash_diffkv,
             )
 
         if self.kv_cache_dtype.startswith("fp8"):

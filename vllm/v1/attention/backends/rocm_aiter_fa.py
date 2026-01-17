@@ -25,6 +25,7 @@ from vllm.v1.attention.backend import (
 )
 from vllm.v1.attention.backends.utils import (
     split_decodes_prefills_and_extends,
+    update_kv_cache_with_op,
 )
 from vllm.v1.attention.ops.merge_attn_states import merge_attn_states
 from vllm.v1.kv_cache_interface import AttentionSpec
@@ -1006,26 +1007,28 @@ class AiterFlashAttentionImpl(AttentionImpl):
                 # We may calculate per token quant scale in
                 # reshape_and_cache_shuffle_triton which might differ from
                 # vllm's style when shuffle layout is used.
-                reshape_and_cache_shuffle_triton(
-                    key,
-                    value,
-                    key_cache,
-                    value_cache,
-                    attn_metadata.slot_mapping,
-                    self.kv_cache_dtype,
-                    attn_metadata.k_scale,
-                    attn_metadata.v_scale,
+                update_kv_cache_with_op(
+                    key=key,
+                    value=value,
+                    key_cache=key_cache,
+                    value_cache=value_cache,
+                    slot_mapping=attn_metadata.slot_mapping,
+                    kv_cache_dtype=self.kv_cache_dtype,
+                    k_scale=attn_metadata.k_scale,
+                    v_scale=attn_metadata.v_scale,
+                    op=reshape_and_cache_shuffle_triton,
                 )
             else:
-                torch.ops._C_cache_ops.reshape_and_cache_flash(
-                    key,
-                    value,
-                    key_cache,
-                    value_cache,
-                    attn_metadata.slot_mapping,
-                    self.kv_cache_dtype,
-                    layer._k_scale,
-                    layer._v_scale,
+                update_kv_cache_with_op(
+                    key=key,
+                    value=value,
+                    key_cache=key_cache,
+                    value_cache=value_cache,
+                    slot_mapping=attn_metadata.slot_mapping,
+                    kv_cache_dtype=self.kv_cache_dtype,
+                    k_scale=layer._k_scale,
+                    v_scale=layer._v_scale,
+                    op=torch.ops._C_cache_ops.reshape_and_cache_flash,
                 )
 
         # decode:extend:prefill

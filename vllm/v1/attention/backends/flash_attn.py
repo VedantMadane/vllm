@@ -49,6 +49,7 @@ from vllm.v1.attention.backend import (
 from vllm.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     get_kv_cache_layout,
+    update_kv_cache_with_op,
 )
 from vllm.v1.kv_cache_interface import AttentionSpec
 
@@ -782,15 +783,16 @@ class FlashAttentionImpl(AttentionImpl):
         # and value[:num_actual_tokens] because the reshape_and_cache_flash
         # op uses the slot_mapping's shape to determine the number of
         # actual tokens.
-        reshape_and_cache_flash(
-            key,
-            value,
-            key_cache,
-            value_cache,
-            slot_mapping,
-            self.kv_cache_dtype,
-            layer._k_scale,
-            layer._v_scale,
+        update_kv_cache_with_op(
+            key=key,
+            value=value,
+            key_cache=key_cache,
+            value_cache=value_cache,
+            slot_mapping=slot_mapping,
+            kv_cache_dtype=self.kv_cache_dtype,
+            k_scale=layer._k_scale,
+            v_scale=layer._v_scale,
+            op=reshape_and_cache_flash,
         )
 
     def _forward_with_dcp(

@@ -17,6 +17,7 @@ from vllm.v1.attention.backends.rocm_attn import (
     RocmAttentionImpl,
     RocmAttentionMetadataBuilder,
 )
+from vllm.v1.attention.backends.utils import update_kv_cache_with_op
 
 logger = init_logger(__name__)
 
@@ -152,15 +153,16 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
         ):
             # Reshape the input keys and values and store them in the cache.
             # Skip this if sharing KV cache with an earlier attention layer.
-            ops.reshape_and_cache_flash(
-                key,
-                value,
-                key_cache,
-                value_cache,
-                attn_metadata.slot_mapping,
-                self.kv_cache_dtype,
-                layer._k_scale,
-                layer._v_scale,
+            update_kv_cache_with_op(
+                key=key,
+                value=value,
+                key_cache=key_cache,
+                value_cache=value_cache,
+                slot_mapping=attn_metadata.slot_mapping,
+                kv_cache_dtype=self.kv_cache_dtype,
+                k_scale=layer._k_scale,
+                v_scale=layer._v_scale,
+                op=ops.reshape_and_cache_flash,
             )
 
         if self.kv_cache_dtype.startswith("fp8"):

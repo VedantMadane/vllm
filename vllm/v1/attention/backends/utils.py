@@ -83,6 +83,85 @@ def set_kv_cache_layout(cache_layout: KVCacheLayoutType):
     _KV_CACHE_LAYOUT_OVERRIDE = cache_layout
 
 
+def update_kv_cache_with_op(
+    *,
+    key: torch.Tensor | None,
+    value: torch.Tensor | None,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    kv_cache_dtype: str,
+    k_scale: torch.Tensor,
+    v_scale: torch.Tensor,
+    op: Callable[
+        [
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            str,
+            torch.Tensor,
+            torch.Tensor,
+        ],
+        None,
+    ],
+) -> None:
+    """Update KV cache using a backend-specific reshape/cache op."""
+    if key is None or value is None:
+        return
+
+    # NOTE: key/value may be padded while slot_mapping is not. The op
+    # uses slot_mapping shape to determine the number of actual tokens.
+    op(
+        key,
+        value,
+        key_cache,
+        value_cache,
+        slot_mapping,
+        kv_cache_dtype,
+        k_scale,
+        v_scale,
+    )
+
+
+def update_kv_cache_with_diffkv_op(
+    *,
+    key: torch.Tensor | None,
+    value: torch.Tensor | None,
+    kv_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    kv_cache_dtype: str,
+    k_scale: torch.Tensor,
+    v_scale: torch.Tensor,
+    op: Callable[
+        [
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            str,
+            torch.Tensor,
+            torch.Tensor,
+        ],
+        None,
+    ],
+) -> None:
+    """Update diffkv cache using a backend-specific reshape/cache op."""
+    if key is None or value is None:
+        return
+
+    op(
+        key,
+        value,
+        kv_cache,
+        slot_mapping,
+        kv_cache_dtype,
+        k_scale,
+        v_scale,
+    )
+
+
 @dataclass
 class PerLayerParameters:
     """

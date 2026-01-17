@@ -57,6 +57,7 @@ from vllm.v1.attention.backends.utils import (
     get_per_layer_parameters,
     infer_global_hyperparameters,
     split_decodes_and_prefills,
+    update_kv_cache_with_op,
 )
 from vllm.v1.attention.ops.common import cp_lse_ag_out_rs
 from vllm.v1.attention.ops.merge_attn_states import merge_attn_states
@@ -1292,22 +1293,16 @@ class FlashInferImpl(AttentionImpl):
         num_actual_tokens = attn_metadata.num_actual_tokens
 
         if self.kv_sharing_target_layer_name is None:
-            # Reshape the input keys and values and store them in the cache.
-            # Skip this if sharing KV cache with an earlier attention layer.
-            # NOTE(woosuk): Here, key and value are padded while slot_mapping is
-            # not padded. However, we don't need to do key[:num_actual_tokens]
-            # and value[:num_actual_tokens] because the reshape_and_cache_flash
-            # op uses the slot_mapping's shape to determine the number of
-            # actual tokens.
-            torch.ops._C_cache_ops.reshape_and_cache_flash(
-                key,
-                value,
-                kv_cache[:, 0],
-                kv_cache[:, 1],
-                attn_metadata.slot_mapping,
-                self.kv_cache_dtype,
-                layer._k_scale,
-                layer._v_scale,
+            update_kv_cache_with_op(
+                key=key,
+                value=value,
+                key_cache=kv_cache[:, 0],
+                value_cache=kv_cache[:, 1],
+                slot_mapping=attn_metadata.slot_mapping,
+                kv_cache_dtype=self.kv_cache_dtype,
+                k_scale=layer._k_scale,
+                v_scale=layer._v_scale,
+                op=torch.ops._C_cache_ops.reshape_and_cache_flash,
             )
 
             # The FlashInfer api requires data to be in fp8_e4m3 or fp8_e5m2
