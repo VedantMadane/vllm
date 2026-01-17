@@ -24,6 +24,7 @@ from vllm.v1.attention.backend import (
     MultipleOf,
 )
 from vllm.v1.attention.backends.flash_attn import FlashAttentionMetadata
+from vllm.v1.attention.backends.utils import update_kv_cache_with_op
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode,
 )
@@ -31,7 +32,6 @@ from vllm.v1.attention.ops.paged_attn import PagedAttention
 from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
-from vllm.v1.attention.backends.utils import update_kv_cache_with_op
 from vllm.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
