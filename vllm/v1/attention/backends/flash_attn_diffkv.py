@@ -13,7 +13,10 @@ from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
 if is_flash_attn_varlen_func_available():
     from vllm.v1.attention.backends.fa_utils import flash_attn_varlen_func
 from vllm.logger import init_logger
-from vllm.v1.attention.backends.utils import get_kv_cache_layout
+from vllm.v1.attention.backends.utils import (
+    get_kv_cache_layout,
+    update_kv_cache_with_diffkv_op,
+)
 
 from .flash_attn import (
     FlashAttentionBackend,
@@ -28,6 +31,7 @@ logger = init_logger(__name__)
 class FlashAttentionDiffKVBackend(FlashAttentionBackend):
     # Default to 128 for this backend
     head_size_v: int = 128
+    forward_includes_kv_cache_update: bool = False
 
     @classmethod
     def set_head_size_v(cls, head_size_v: int) -> None:
@@ -85,6 +89,26 @@ class FlashAttentionDiffKVBackend(FlashAttentionBackend):
 
 
 class FlashAttentionDiffKVImpl(FlashAttentionImpl):
+    def do_kv_cache_update(
+        self,
+        layer: torch.nn.Module,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        kv_cache: torch.Tensor,
+        attn_metadata: FlashAttentionMetadata,
+    ) -> None:
+        update_kv_cache_with_diffkv_op(
+            triton_reshape_and_cache_flash_diffkv,
+            kv_cache,
+            key,
+            value,
+            self.kv_sharing_target_layer_name,
+            attn_metadata.slot_mapping,
+            self.kv_cache_dtype,
+            layer._k_scale,
+            layer._v_scale,
+        )
+
     def forward(
         self,
         layer: torch.nn.Module,
@@ -156,33 +180,6 @@ class FlashAttentionDiffKVImpl(FlashAttentionImpl):
         # Different head_size for K and V
         key_cache = kv_cache[..., : self.head_size]
         value_cache = kv_cache[..., self.head_size :]
-
-        # key and value may be None in the case of cross attention. They are
-        # calculated once based on the output from the encoder and then cached
-        # in KV cache.
-        if (
-            self.kv_sharing_target_layer_name is None
-            and key is not None
-            and value is not None
-        ):
-            # Reshape the input keys and values and store them in the cache.
-            # Skip this if sharing KV cache with an earlier attention layer.
-            # NOTE(woosuk): Here, key and value are padded while slot_mapping is
-            # not padded. However, we don't need to do key[:num_actual_tokens]
-            # and value[:num_actual_tokens] because the reshape_and_cache_flash
-            # op uses the slot_mapping's shape to determine the number of
-            # actual tokens.
-
-            # kv_cache update for different head_size K and V
-            triton_reshape_and_cache_flash_diffkv(
-                key,
-                value,
-                kv_cache,
-                attn_metadata.slot_mapping,
-                self.kv_cache_dtype,
-                layer._k_scale,
-                layer._v_scale,
-            )
 
         if self.kv_cache_dtype.startswith("fp8"):
             # queries are quantized in the attention layer

@@ -818,3 +818,80 @@ def get_dcp_local_seq_lens(
     )
     dcp_local_seq_lens = base + remainder
     return dcp_local_seq_lens.squeeze(1)
+
+def update_kv_cache_with_op(
+    op: Callable,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    key: torch.Tensor | None,
+    value: torch.Tensor | None,
+    kv_sharing_target_layer_name: str | None,
+    slot_mapping: torch.Tensor,
+    kv_cache_dtype: str,
+    k_scale: float | torch.Tensor,
+    v_scale: float | torch.Tensor,
+) -> None:
+    # key and value may be None in the case of cross attention. They are
+    # calculated once based on the output from the encoder and then cached
+    # in KV cache.
+    if (
+        kv_sharing_target_layer_name is None
+        and key is not None
+        and value is not None
+    ):
+        # Reshape the input keys and values and store them in the cache.
+        # Skip this if sharing KV cache with an earlier attention layer.
+        # NOTE(woosuk): Here, key and value are padded while slot_mapping is
+        # not padded. However, we don't need to do key[:num_actual_tokens]
+        # and value[:num_actual_tokens] because the reshape_and_cache_flash
+        # op uses the slot_mapping's shape to determine the number of
+        # actual tokens.
+        op(
+            key,
+            value,
+            key_cache,
+            value_cache,
+            slot_mapping,
+            kv_cache_dtype,
+            k_scale,
+            v_scale,
+        )
+
+
+def update_kv_cache_with_diffkv_op(
+    op: Callable,
+    kv_cache: torch.Tensor,
+    key: torch.Tensor | None,
+    value: torch.Tensor | None,
+    kv_sharing_target_layer_name: str | None,
+    slot_mapping: torch.Tensor,
+    kv_cache_dtype: str,
+    k_scale: float | torch.Tensor,
+    v_scale: float | torch.Tensor,
+) -> None:
+    # key and value may be None in the case of cross attention. They are
+    # calculated once based on the output from the encoder and then cached
+    # in KV cache.
+    if (
+        kv_sharing_target_layer_name is None
+        and key is not None
+        and value is not None
+    ):
+        # Reshape the input keys and values and store them in the cache.
+        # Skip this if sharing KV cache with an earlier attention layer.
+        # NOTE(woosuk): Here, key and value are padded while slot_mapping is
+        # not padded. However, we don't need to do key[:num_actual_tokens]
+        # and value[:num_actual_tokens] because the reshape_and_cache_flash
+        # op uses the slot_mapping's shape to determine the number of
+        # actual tokens.
+
+        # kv_cache update for different head_size K and V
+        op(
+            key,
+            value,
+            kv_cache,
+            slot_mapping,
+            kv_cache_dtype,
+            k_scale,
+            v_scale,
+        )
